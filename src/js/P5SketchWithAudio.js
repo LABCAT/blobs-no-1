@@ -3,14 +3,22 @@ import "./helpers/Globals";
 import "p5/lib/addons/p5.sound";
 import * as p5 from "p5";
 import { Midi } from '@tonejs/midi'
-import { TetradicColourCalculator } from './functions/ColourCalculators';
+import blobshape from "blobshape";
+import { TriadicColourCalculator } from './functions/ColourCalculators';
 import PlayIcon from './functions/PlayIcon.js';
-import SaveJSONToFile from './functions/SaveJSONToFile.js';
-import Diamond from './classes/Diamond.js';
 
 import audio from "../audio/blobs-no-1.ogg";
 import midi from "../audio/blobs-no-1.mid";
 
+/**
+ * Inspiration:
+ * 
+ * https://github.com/lokesh-coder/blobshape/
+ * https://github.com/nghiepdev/react-svg-blob/tree/main
+ * https://codepen.io/Dillo/pen/KKrjKpa?editors=0010
+ * https://dev.to/georgedoescode/a-generative-svg-starter-kit-5cm1
+ * 
+ */
 const P5SketchWithAudio = () => {
     const sketchRef = useRef();
 
@@ -31,8 +39,7 @@ const P5SketchWithAudio = () => {
         p.loadMidi = () => {
             Midi.fromUrl(midi).then(
                 function(result) {
-                    console.log(result);
-                    const noteSet1 = result.tracks[13].notes; // Subtrator 1 - Hyperbottom
+                    const noteSet1 = result.tracks[2].notes; // Synth 1 - Init Patch
                     p.scheduleCueSet(noteSet1, 'executeCueSet1');
                     p.audioLoaded = true;
                     document.getElementById("loader").classList.add("loading--complete");
@@ -62,19 +69,11 @@ const P5SketchWithAudio = () => {
             }
         } 
 
-        p.xSize = 0;
-
-        p.ySize = 0;
-
         p.setup = () => {
             p.canvas = p.createCanvas(p.canvasWidth, p.canvasHeight);
             p.background(0);
             p.colorMode(p.HSB);
-            p.cells = require('../json/grid-64x64.json');
-            p.xSize = p.height / p.random([64, 48]);
-            p.ySize = p.width / p.random([64, 48]);
-            p.noFill();
-            p.strokeWeight(4);
+            p.strokeWeight(2);
             p.noLoop();
         }
 
@@ -84,246 +83,92 @@ const P5SketchWithAudio = () => {
             }
         }
 
-        p.cells = [];
-
-        p.generateCells = () => {
-            let loopIndex = 1;
-            for (let i = 0; i <= 64; i++) {
-                for (let x = -i; x < i; x++) {
-                    for (let y = -i; y < i; y++) {
-
-                        const key = x + '-' + y;
-                        if (! p.cells.some(r => r.key === key)) {
-                            p.cells.push(
-                                {
-                                    key: key,
-                                    x: x,
-                                    y: y,
-                                    loopIndex: loopIndex
-                                }
-                            );
-                        }
-                        
-                    }
+        p.drawBlob = (x, y, size, growth, edges, color) => {
+            const { path } = blobshape({ size: size, growth: growth, edges: edges, seed: 1 });
+            const pathArray = p.parseSVGPath(path);
+            p.translate(x - (size / 2), y - (size / 2));
+            p.fill(
+                color._getHue(),
+                100,
+                100,
+                0.5
+            );
+            p.stroke(
+                color._getHue(),
+                100,
+                100,
+                1
+            );
+            p.beginShape();
+            for (let cmd of pathArray) {
+                let command = cmd[0];
+                let params = cmd.slice(1);
+                
+                if (command === 'M') {
+                    p.vertex(params[0], params[1]);
+                } else if (command === 'Q') {
+                    p.quadraticVertex(params[0], params[1], params[2], params[3]);
                 }
-                loopIndex++;
             }
-            SaveJSONToFile(p.cells, 'grid.json');
+            p.endShape(p.CLOSE);
+            p.translate(-x + (size / 2), -y + (size / 2));
         }
 
-        p.startingPositions = [
-            {
-                x: 1,
-                y: 1
-            },
-            {
-                x: 1,
-                y: 3
-            },
-            {
-                x: 3,
-                y: 1
-            },
-            {
-                x: 3,
-                y: 3
-            },
-        ];
+        p.parseSVGPath = (pathData) => {
+            let commands = pathData.match(/[a-df-z][^a-df-z]*/gi);
+            let pathArray = [];
+            
+            for (let cmd of commands) {
+                let command = cmd.charAt(0);
+                let params = cmd.slice(1).split(/[\s,]+/).map(Number);
+                pathArray.push([command, ...params]);
+            }
+            
+            return pathArray;
+        }
 
+        p.sizes = [8, 12, 16, 24, 32, 48, 64];
+
+        p.blobsArray = [];
 
         p.executeCueSet1 = (note) => {
-
-            const { currentCue, duration } = note;
+            const { duration } = note;
+            p.blobsArray = [];
             p.background(0);
-            if(currentCue % 4 === 1){
-                p.startingPositions = p.shuffle(p.startingPositions);
-                p.bigDiamonds = [];
-                p.smallDiamonds = [];
+
+            const divisor = p.random(p.sizes);
+            console.log(divisor);
+            for (let x = 0; x <= p.width; x = x + (p.width / divisor)) {
+                for (let y = 0; y <= (p.height + (p.width / divisor)); y = y + (p.width / divisor)) {
+                    const hue = p.random(0, 360);
+                    p.blobsArray.push({
+                        x: x,
+                        y: y,
+                        growth: parseInt(p.random(3, 9)),
+                        edges: parseInt(p.random(4, 16)),
+                        colourSet: TriadicColourCalculator(p, hue),
+                        divisor: divisor
+                    });
+                    
+                    
+                }  
             }
 
-            
+            p.blobsArray = p.shuffle(p.blobsArray);
+            const delay = (duration * 1000 / p.blobsArray.length);
+            for (let i = 0; i < p.blobsArray.length; i++) {
+                const blob = p.blobsArray[i];
+                const { x, y, growth, edges, colourSet } = blob;
 
-            p.xSize = p.height / p.random([80, 64, 32, 16, 8]) / 4;
-            p.ySize = p.width / p.random([80, 64, 32, 16, 8]) / 4;
-
-            p.lines = [];
-
-            const baseHue = p.random(0, 360);
-            let colours = [];
-
-            p.strokeWeight(p.random([2,3,4]));
-
-            for (let i = 0; i < 32; i++) {
-                
-                
-                if(i > 0) {
-                    colours = TetradicColourCalculator(p, baseHue, 50 + 50 / 32 * i, 100 - 64 / 32 * i);
-                    const numberOfLines = i * 2 + 1;
-                    // connecting cell and top left
-
-                    for (let j = 1; j <= numberOfLines; j++) {
-                        const x1 = j === numberOfLines ? p.xSize * (j - 2) * -1 : p.xSize * j * -1,
-                            y1 = p.ySize * (j - numberOfLines),
-                            x2 = p.xSize  * (j - 1)* -1, 
-                            y2 = p.ySize * (j - 1 - numberOfLines);
-                        p.lines.push({
-                            x1: x1,
-                            y1: y1,
-                            x2: x2,
-                            y2: y2,
-                            strokeColor: colours[0]
-                        });
-                    }
-                    
-                    //top right
-                    
-                    for (let j = 1; j <= numberOfLines; j++) {
-                        const x1 = p.xSize * (j - 1),
-                            y1 = p.ySize * (j - 1 - numberOfLines),
-                            x2 = p.xSize * j, 
-                            y2 = p.ySize * (j - numberOfLines);
-                        p.lines.push({
-                            x1: x1,
-                            y1: y1,
-                            x2: x2,
-                            y2: y2,
-                            strokeColor: colours[1]
-                        });
-                    }
-
-                    // bottom right
-                    for (let j = 1; j <= numberOfLines; j++) {
-                        const x1 = p.xSize * j,
-                            y1 = p.ySize * (j - numberOfLines) * -1,
-                            x2 = p.xSize  * (j - 1), 
-                            y2 = p.ySize * (j - 1 - numberOfLines) * -1;
-                        p.lines.push({
-                            x1: x1,
-                            y1: y1,
-                            x2: x2,
-                            y2: y2,
-                            strokeColor: colours[2]
-                        });
-                    }
-
-                    // bottom left
-                    for (let j = 1; j <= numberOfLines; j++) {
-                            const x1 = p.xSize * (j - 1) * -1,
-                            y1 = p.ySize * (j - 1 - numberOfLines) * -1,
-                            x2 = p.xSize * j * -1, 
-                            y2 = p.ySize * (j - numberOfLines) * -1;
-                        p.lines.push({
-                            x1: x1,
-                            y1: y1,
-                            x2: x2,
-                            y2: y2,
-                            strokeColor: colours[3]
-                        });
-                    }
-                }
-                else {
-                    // top right
-                    p.lines.push({
-                        x1: p.xSize * 0,
-                        y1: p.ySize * -1,
-                        x2: p.xSize * 1,
-                        y2: p.ySize * 0,
-                        strokeColor: p.color(p.random(0,255), p.random(0,255), p.random(0,255))
-                    })
-                    // bottom right
-                    p.lines.push({
-                        x1: p.xSize * 1,
-                        y1: p.ySize * 0,
-                        x2: p.xSize * 0,
-                        y2: p.ySize * 1,
-                        strokeColor: p.color(p.random(0,255), p.random(0,255), p.random(0,255))
-                    });
-                    // bottom left
-                    p.lines.push({
-                        x1: p.xSize * 0,
-                        y1: p.ySize * 1,
-                        x2: p.xSize * -1,
-                        y2: p.ySize * 0,
-                        strokeColor: p.color(p.random(0,255), p.random(0,255), p.random(0,255))
-                    });
-                }
+                setTimeout(
+                    function () {
+                        p.drawBlob(x, y, (p.width / (divisor * 0.9)), growth, edges, colourSet[0]);
+                        p.drawBlob(x, y, (p.width / (divisor * 1.2)), growth, edges, colourSet[1]);
+                        p.drawBlob(x, y, (p.width / (divisor * 1.5)), growth, edges, colourSet[2]);
+                    },
+                    (delay * i)
+                );
             }
-
-            const diamondIndex = currentCue % 4 ? currentCue % 4 - 1 : 3; 
-            p.bigDiamonds[diamondIndex] = p.lines;
-
-            p.bigDiamonds.forEach((diamond, index) => {
-                const lines = diamond, 
-                    startingPos = p.startingPositions[index],
-                    { x, y } = startingPos,
-                    startX = p.width / 4 * x,
-                    startY = p.height / 4 * y;
-
-                const delay = (duration * 1000 / lines.length) * 0.5;
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i],
-                        { x1, y1, x2, y2, strokeColor } = line;
-                    
-
-                    setTimeout(
-                        function () {
-                            p.translate(startX, startY);
-                            p.stroke(strokeColor);
-                            p.line(x1,y1,x2,y2);
-                            p.translate(-startX, -startY);
-                        },
-                        (delay * i)
-                    );
-                    
-                }
-            });
-        }
-
-        p.currentMidi = 0;
-
-        p.sizeAdjuster = 3;
-
-        p.executeCueSet2 = (note) => {
-            const { currentCue, midi } = note;
-            p.sizeAdjuster = p.currentMidi === midi ? p.sizeAdjuster - 1 : 3;
-            p.currentMidi = midi;
-            const positions = [
-                {
-                    x: 7,
-                    y: 4
-                },
-                {
-                    x: 4,
-                    y: 7
-                },
-                {
-                    x: 1,
-                    y: 4
-                },
-                {
-                    x: 4,
-                    y: 1
-                },
-            ];
-
-            const location = [62, 59, 57, 60].indexOf(midi)
-
-            p.smallDiamonds.push(
-                new Diamond(
-                    p,
-                    p.width / 8 * positions[location].x,
-                    p.height / 8  * positions[location].y,
-                    p.random(0, 360),
-                    p.width / 2 * p.sizeAdjuster, 
-                    100, 
-                    0
-                )
-            );
-            
-
-            p.smallDiamonds.forEach((diamond) => {
-                diamond.draw();
-            });
         }
 
         p.hasStarted = false;
