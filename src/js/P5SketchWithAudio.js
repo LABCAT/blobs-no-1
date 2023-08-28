@@ -83,8 +83,8 @@ const P5SketchWithAudio = () => {
             }
         }
 
-        p.drawBlob = (x, y, size, growth, edges, color) => {
-            const { path } = blobshape({ size: size, growth: growth, edges: edges, seed: 1 });
+        p.drawBlob = (x, y, size, growth, edges, color, seed) => {
+            const { path } = blobshape({ size: size, growth: growth, edges: edges, seed: seed });
             const pathArray = p.parseSVGPath(path);
             p.translate(x - (size / 2), y - (size / 2));
             p.fill(
@@ -137,34 +137,36 @@ const P5SketchWithAudio = () => {
             p.background(0);
 
             const divisor = p.random(p.sizes);
-            console.log(divisor);
+            let offsetPos = false;
             for (let x = 0; x <= p.width; x = x + (p.width / divisor)) {
                 for (let y = 0; y <= (p.height + (p.width / divisor)); y = y + (p.width / divisor)) {
                     const hue = p.random(0, 360);
                     p.blobsArray.push({
                         x: x,
-                        y: y,
+                        y: offsetPos ? y + ((p.width / divisor) / 2) : y,
                         growth: parseInt(p.random(3, 9)),
                         edges: parseInt(p.random(4, 16)),
                         colourSet: TriadicColourCalculator(p, hue),
-                        divisor: divisor
+                        divisor: divisor,
+                        seed: p.random(1, 10)
                     });
                     
                     
                 }  
+                offsetPos = !offsetPos;
             }
 
             p.blobsArray = p.shuffle(p.blobsArray);
             const delay = (duration * 1000 / p.blobsArray.length);
             for (let i = 0; i < p.blobsArray.length; i++) {
                 const blob = p.blobsArray[i];
-                const { x, y, growth, edges, colourSet } = blob;
+                const { x, y, growth, edges, colourSet, seed } = blob;
 
                 setTimeout(
                     function () {
-                        p.drawBlob(x, y, (p.width / (divisor * 0.9)), growth, edges, colourSet[0]);
-                        p.drawBlob(x, y, (p.width / (divisor * 1.2)), growth, edges, colourSet[1]);
-                        p.drawBlob(x, y, (p.width / (divisor * 1.5)), growth, edges, colourSet[2]);
+                        p.drawBlob(x, y, (p.width / (divisor * 0.9)), growth, edges, colourSet[0], seed);
+                        p.drawBlob(x, y, (p.width / (divisor * 1.2)), growth, edges, colourSet[1], seed);
+                        p.drawBlob(x, y, (p.width / (divisor * 1.5)), growth, edges, colourSet[2], seed);
                     },
                     (delay * i)
                 );
