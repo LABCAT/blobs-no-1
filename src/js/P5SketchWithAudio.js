@@ -136,14 +136,15 @@ const P5SketchWithAudio = () => {
             p.blobsArray = [];
             p.background(0);
 
+            const numerator = p.width >= p.height ? p.width : p.height;
             const divisor = p.random(p.sizes);
             let offsetPos = false;
-            for (let x = 0; x <= p.width; x = x + (p.width / divisor)) {
-                for (let y = 0; y <= (p.height + (p.width / divisor)); y = y + (p.width / divisor)) {
+            for (let x = 0; x <= p.width; x = x + (numerator / divisor)) {
+                for (let y = 0; y <= (p.height + (numerator / divisor)); y = y + (numerator / divisor)) {
                     const hue = p.random(0, 360);
                     p.blobsArray.push({
                         x: x,
-                        y: offsetPos ? y + ((p.width / divisor) / 2) : y,
+                        y: offsetPos ? y + ((numerator / divisor) / 2) : y,
                         growth: parseInt(p.random(3, 9)),
                         edges: parseInt(p.random(4, 16)),
                         colourSet: TriadicColourCalculator(p, hue),
